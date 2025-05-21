@@ -1,0 +1,171 @@
+import tkinter as tk
+from tkinter import messagebox
+from tkinter import scrolledtext
+from fpdf import FPDF
+import os
+import platform
+import subprocess
+from datetime import datetime
+
+summary = ""
+last_pdf_path = None  # To store last exported PDF file path
+
+def calculate_water_intake():
+    global summary
+    try:
+        age = int(entry_age.get())
+        weight = float(entry_weight.get())
+        activity = activity_var.get()
+        location = location_var.get()
+
+        # Base water intake in ml (35 ml per kg)
+        base_intake_ml = 35 * weight
+
+        # Adjust intake based on activity level
+        if activity == "Sedentary":
+            activity_factor = 1.0
+        elif activity == "Moderate":
+            activity_factor = 1.2
+        elif activity == "Active":
+            activity_factor = 1.4
+        else:
+            activity_factor = 1.0
+
+        # Adjust intake based on location/climate
+        if location == "Cool":
+            location_factor = 1.0
+        elif location == "Moderate":
+            location_factor = 1.1
+        elif location == "Hot":
+            location_factor = 1.25
+        else:
+            location_factor = 1.0
+
+        total_intake_ml = base_intake_ml * activity_factor * location_factor
+        total_intake_l = total_intake_ml / 1000  # convert to liters
+
+        result_label.config(text=f"Recommended Daily Water Intake: {total_intake_l:.2f} liters", fg="blue")
+
+        summary = (
+            f"Age: {age} years\n"
+            f"Weight: {weight} kg\n"
+            f"Activity Level: {activity}\n"
+            f"Location/Climate: {location}\n"
+            f"------------------------------\n"
+            f"Recommended Water Intake: {total_intake_l:.2f} liters per day"
+        )
+
+        text_summary.delete(1.0, tk.END)
+        text_summary.insert(tk.END, summary)
+        text_summary.pack(pady=10)
+
+    except ValueError:
+        messagebox.showerror("Invalid Input", "Please enter valid numbers.")
+
+def export_pdf():
+    global last_pdf_path
+    if not summary:
+        messagebox.showwarning("No Data", "Please calculate water intake first.")
+        return
+
+    now = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+    filename = f"Water_Intake_{now}.pdf"
+    desktop_path = os.path.join(os.path.expanduser("~"), "Desktop", filename)
+
+    pdf = FPDF()
+    pdf.add_page()
+    pdf.set_font("Arial", size=12)
+
+    for line in summary.split("\n"):
+        pdf.cell(200, 10, txt=line, ln=True)
+
+    pdf.output(desktop_path)
+
+    last_pdf_path = desktop_path
+    btn_view_pdf.config(state=tk.NORMAL)
+
+    messagebox.showinfo("Success", f"PDF saved to Desktop as {filename}")
+
+def open_pdf(path):
+    try:
+        if platform.system() == "Windows":
+            os.startfile(path)
+        elif platform.system() == "Darwin":  # macOS
+            subprocess.call(["open", path])
+        else:  # Linux and others
+            subprocess.call(["xdg-open", path])
+    except Exception as e:
+        messagebox.showerror("Error", f"Failed to open PDF: {e}")
+
+def view_last_pdf():
+    if last_pdf_path and os.path.exists(last_pdf_path):
+        open_pdf(last_pdf_path)
+    else:
+        messagebox.showwarning("No File", "No PDF available to view. Please export first.")
+
+def reset_fields():
+    entry_age.delete(0, tk.END)
+    entry_weight.delete(0, tk.END)
+    activity_var.set("Sedentary")
+    location_var.set("Moderate")
+    result_label.config(text="")
+    text_summary.delete(1.0, tk.END)
+    btn_view_pdf.config(state=tk.DISABLED)
+
+# GUI Setup
+root = tk.Tk()
+root.title("Water Intake Calculator")
+root.geometry("600x700")
+root.config(bg="#f0f8ff")
+
+tk.Label(root, text="Water Intake Calculator", font=("Helvetica", 20, "bold"), bg="#f0f8ff", fg="#1e90ff").pack(pady=10)
+
+frame = tk.Frame(root, bg="#f0f8ff")
+frame.pack(pady=10)
+
+def labeled_entry(label_text):
+    row = tk.Frame(frame, bg="#f0f8ff")
+    tk.Label(row, text=label_text, width=25, anchor='w', bg="#f0f8ff").pack(side=tk.LEFT)
+    entry = tk.Entry(row, width=25)
+    entry.pack(side=tk.RIGHT)
+    row.pack(pady=5)
+    return entry
+
+entry_age = labeled_entry("Enter Age (years):")
+entry_weight = labeled_entry("Enter Weight (kg):")
+
+# Activity level dropdown
+activity_var = tk.StringVar(value="Sedentary")
+row_activity = tk.Frame(frame, bg="#f0f8ff")
+tk.Label(row_activity, text="Activity Level:", width=25, anchor='w', bg="#f0f8ff").pack(side=tk.LEFT)
+activity_menu = tk.OptionMenu(row_activity, activity_var, "Sedentary", "Moderate", "Active")
+activity_menu.config(width=22)
+activity_menu.pack(side=tk.RIGHT)
+row_activity.pack(pady=5)
+
+# Location/climate dropdown
+location_var = tk.StringVar(value="Moderate")
+row_location = tk.Frame(frame, bg="#f0f8ff")
+tk.Label(row_location, text="Climate:", width=25, anchor='w', bg="#f0f8ff").pack(side=tk.LEFT)
+location_menu = tk.OptionMenu(row_location, location_var, "Cool", "Moderate", "Hot")
+location_menu.config(width=22)
+location_menu.pack(side=tk.RIGHT)
+row_location.pack(pady=5)
+
+btn_frame = tk.Frame(root, bg="#f0f8ff")
+btn_frame.pack(pady=10)
+
+tk.Button(btn_frame, text="Calculate", command=calculate_water_intake, bg="green", fg="white", width=12).grid(row=0, column=0, padx=10)
+tk.Button(btn_frame, text="Export to PDF", command=export_pdf, bg="blue", fg="white", width=12).grid(row=0, column=1, padx=10)
+tk.Button(btn_frame, text="Reset", command=reset_fields, bg="red", fg="white", width=12).grid(row=0, column=2, padx=10)
+
+btn_view_pdf = tk.Button(btn_frame, text="View PDF", command=view_last_pdf, bg="yellow", fg="white", width=12, state=tk.DISABLED)
+btn_view_pdf.grid(row=1, column=1, pady=10)
+
+result_label = tk.Label(root, text="", font=("Arial", 14), fg="blue", bg="#f0f8ff")
+result_label.pack(pady=10)
+
+text_summary = scrolledtext.ScrolledText(root, width=70, height=10, wrap=tk.WORD, font=("Arial", 10))
+# initially not packed, will pack after calculation
+
+root.mainloop()
